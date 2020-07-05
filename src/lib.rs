@@ -48,7 +48,7 @@ struct MidiMessage {
 impl MidiMessage {
     fn new() -> MidiMessage {
         MidiMessage {
-            bytes: vec![],
+            bytes: Vec::with_capacity(256),
             timestamp: 0
         }
     }

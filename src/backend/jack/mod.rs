@@ -16,6 +16,7 @@ use ::errors::*;
 const OUTPUT_RINGBUFFER_SIZE: usize = 16384;
 
 struct InputHandlerData<T> {
+    msg: MidiMessage,
     port: Option<MidiPort>,
     ignore_flags: Ignore,
     callback: Box<dyn FnMut(u64, &[u8], &mut T) + Send>,
@@ -80,6 +81,7 @@ impl MidiInput {
             where F: FnMut(u64, &[u8], &mut T) + Send + 'static
     {
         let handler_data = Box::new(InputHandlerData {
+            msg: MidiMessage::new(),
             port: None,
             ignore_flags: self.ignore_flags,
             callback: Box::new(callback),
@@ -172,24 +174,22 @@ extern "C" fn handle_input<T>(nframes: jack_nframes_t, arg: *mut c_void) -> i32 
     // Is port created?
     if let Some(ref port) = data.port {
         let buff = port.get_midi_buffer(nframes);
-        
-        let mut message = MidiMessage::new(); // TODO: create MidiMessage once and reuse its buffer for every handle_input call
-        
+                
         // We have midi events in buffer
         let evcount = buff.get_event_count();
         let mut event = unsafe { mem::uninitialized() };
         
         for j in 0..evcount {
-            message.bytes.clear();
+            data.msg.bytes.clear();
             
             unsafe { buff.get_event(&mut event, j) };
             
             for i in 0..event.size {
-                message.bytes.push(unsafe { *event.buffer.offset(i as isize) });
+                data.msg.bytes.push(unsafe { *event.buffer.offset(i as isize) });
             }
             
-            message.timestamp = Client::get_time(); // this is in microseconds
-            (data.callback)(message.timestamp, &message.bytes, data.user_data.as_mut().unwrap());
+            data.msg.timestamp = Client::get_time(); // this is in microseconds
+            (data.callback)(data.msg.timestamp, &data.msg.bytes, data.user_data.as_mut().unwrap());
         }
     }
     
